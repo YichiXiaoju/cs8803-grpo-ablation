@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs8803-grpo-ablation"
+version = "0.1.0"
+description = "Controlled GRPO, Dr. GRPO and DAPO component ablations for CS 8803 Deep RL"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.1"]
+
+[project.optional-dependencies]
+data = ["datasets>=2.18"]
+train = ["transformers>=4.46", "trl>=0.15", "peft>=0.13", "accelerate>=1.0", "datasets>=2.18"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

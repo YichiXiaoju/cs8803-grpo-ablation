@@ -1,0 +1,13 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+.venv/
+.env
+runs/
+checkpoints/
+wandb/
+outputs/
+*.safetensors
+*.pt
+.DS_Store
