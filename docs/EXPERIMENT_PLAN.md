@@ -1,6 +1,6 @@
 # CS 8803 DRL — Controlled Experiment Plan (Team T26)
 
-**Status:** proposal for team review, 2026-11-02. No model-training results have been collected yet. This is a **component-ablation study**, not an exact reproduction of DeepSeekMath, Dr. GRPO, or full DAPO.
+**Status:** revised proposal for team review, 2026-11-02. No model-training results have been collected yet. Includes both **controlled component ablations** and a **DAPO-style full-recipe comparison**; none is an exact reproduction of the original papers.
 
 **Research question:** How do group reward standardization, response-length aggregation, asymmetric clipping, and dynamic sampling influence mathematical reasoning accuracy, output length, exploration, and compute efficiency?
 
@@ -13,7 +13,7 @@
 | Nov 18 (internal) / Nov 19 (Canvas) | 12–15-minute revised video, Media Gallery link, 5 quiz questions | Include confirmed preliminary results where available |
 | Dec 7 | Final video, implementation, modification, findings | Controlled training ablations and reproducibility artifacts |
 
-**Priorities:** P0 = pilot and working baseline; P1 = E0–E3 normalization factorial; P2 = E4–E6 DAPO clipping/sampling factorial; P3 = optional additional token-level and full-recipe controls. Seven training configurations are **planned**, not promised if GPU resources or reward signal prove insufficient.
+**Priorities:** P0 = pilot and working baseline; P1 = E0–E3 normalization factorial **plus E7 token-level-only and E8 DAPO-style combined recipe**; P2 = E4/E5 isolated clipping/sampling comparisons; P3 = optional E6 clipping × sampling interaction. **E0, E3 and E8 are the three method-level reference arms.** Planned arms are subject to GPU/rollout feasibility; no results are assumed.
 
 ## 2. Common experimental setup (provisional)
 
@@ -51,7 +51,7 @@ Here `B=P*G`, `ell_it` is the same PPO-clipped **surrogate** for each experiment
 
 **Primary metrics:** held-out answer accuracy; mean and distribution of correct/incorrect response length; truncation; gradient norm, parameter-update norm; reward std and `K` frequency. Predefine difficulty buckets on **initial checkpoint** pilot pass rate and freeze those bucket assignments to avoid moving-label confounds.
 
-## 4. P2: DAPO clipping × sampling factorial — E4–E6 (Kira)
+## 4. DAPO component ablations — E4/E5 mandatory targets, E6 optional interaction (Kira)
 
 Use the **same E0** as the fourth corner; keep reward standardization ON, response-mean aggregation and all other choices identical. This intentionally isolates clipping and sampling, rather than claiming full DAPO.
 
@@ -60,21 +60,30 @@ Use the **same E0** as the fourth corner; keep reward standardization ON, respon
 | **E0** | Shared baseline | OFF (upper 1.20) | OFF | Baseline |
 | **E4** | Clip-Higher only | ON (upper 1.28) | OFF | Does wider positive-advantage clipping change entropy / positive clip fraction / accuracy? |
 | **E5** | Dynamic Sampling only | OFF | ON | Does filtering all-correct/all-wrong groups improve learning per *generated token*? |
-| **E6** | Both | ON | ON | Do the two effects interact? |
+| **E6 (optional)** | Both | ON | ON | Do the two effects interact? |
 
 **Dynamic Sampling policy:** for binary rewards, accept a prompt group only when `0<K<G`; rejected groups consume generation compute and must be counted. State how the next prompt is drawn; make attempts per run finite and log acceptance/rejection rates, attempted prompts, generated tokens and wall-clock cost. Dynamic sampling changes the distribution of *accepted* prompts. Do **not** compare E5/E6 with E0 solely by equal optimizer steps; provide accuracy at equal attempted generation budgets.
 
 **Secondary metrics:** policy/token entropy computed consistently, positive/negative clipped-token fractions, mixed-group rate before and after filtering, accepted difficulty distribution, and all attempted (including discarded) completion tokens.
 
-## 5. P3: optional DAPO token loss and full-recipe extension
+## 5. Required DAPO token-level loss and combined comparison — E7/E8
 
-**Not part of the 7-arm minimum plan**; the E6 configuration is *not* full DAPO.
+DAPO's **token-level loss is a core method component**. It is not optional when claiming to compare with a DAPO-style recipe. The existing E4–E6 runs intentionally hold response-wise aggregation fixed to isolate clip/sampling effects; none should be labeled full DAPO.
 
-- **Offline fixed-rollout diagnostic:** using identical `new_logp`, `old_logp`, rewards and token masks, compare aggregation modes `response` / `token` / `fixed`; verify scalar losses, gradient direction, per-token weights and batch-dependent scale. No added GPU training run required.
-- **E7 (optional, preferred isolated extension):** E0 with **only** token-level mean `sum_it ell_it / sum_i T_i`. Tests DAPO token-level aggregation independent of clipping and sampling.
-- **E8 (optional recipe):** token-level mean + Clip-Higher + Dynamic Sampling + overlong handling. This combines multiple changes and must be called a **DAPO-style recipe**, not an isolated causal comparison or exact paper reproduction.
+| ID | Name | Relative to E0 | Purpose | Priority |
+| --- | --- | --- | --- | --- |
+| **E7** | Token-level mean only | Change **only** response mean to `sum_it ell_it / sum_i T_i` | Isolate effect of DAPO loss aggregation on length, accuracy, gradient scale | **Required target** |
+| **E8** | DAPO-style full recipe | Clip-Higher, Dynamic Sampling, token-level mean, overlong filtering + soft overlong penalty | Compare combined DAPO-style method against E0 GRPO and E3 Dr. GRPO | **Required target** |
 
-For identical fixed rollouts/advantages, token mean versus fixed-`L` gradient differs by a batch-dependent positive scalar `B*L / sum_i T_i`; changing advantage normalization breaks this equivalence.
+**Algorithm-level comparisons:** E0 vs E3 vs E8 answer which *combined configurations* perform differently in the same 3B/GSM8K setting. Differences between E8 and E0 **cannot be attributed to any one component**. Use E1/E2/E4/E5/E7 to isolate individual mechanisms; E6 is the optional clip×sampling interaction.
+
+**Implement E8 carefully:** define a shared maximum length and an explicit overlong threshold; document which completions are excluded from policy loss, which still count toward sampling cost, and the soft penalty applied near the length cap. Treat overlong handling as distinct from normal answer correctness; avoid treating truncated generations as reliable negative labels. Use identical reward scale and evaluation settings across all arms.
+
+**Offline fixed-rollout diagnostic (still required as a unit-test / analysis deliverable):** on identical `new_logp`, `old_logp`, rewards and token masks, compare `response` / `token` / `fixed` aggregation; verify scalar loss, gradient direction, per-token weights and batch-dependent scale. This is **not** a substitute for the E7 training comparison when resources permit.
+
+For identical fixed rollouts/advantages, token mean versus fixed-`L` gradient differs by a batch-dependent positive scalar `B*L / sum_i T_i`; changing reward normalization breaks this equivalence.
+
+**Feasibility fallback:** if E8 or E7 cannot be trained robustly within the available allocation, report the implementation/unit tests and exactly which arms were actually run, without claiming a completed full-method comparison.
 
 ## 6. Evaluation protocol and fairness
 
@@ -92,8 +101,8 @@ For identical fixed rollouts/advantages, token mean versus fixed-`L` gradient di
 | --- | --- | --- | --- |
 | **GRPO lead** | Baseline end-to-end interfaces, group generation/reward/one optimizer step | GRPO pilot, slides and script | Reproducible E0, baseline discussion |
 | **Xiaoju — Dr. GRPO** | Verify `advantage=std/center`, `aggregation=response/fixed`; numerical and gradient tests | E1–E3 switches integrated, short validation, Dr. GRPO slides/script | E0–E3 length/difficulty analysis and causal comparisons |
-| **Kira — DAPO** | Clip-Higher & Dynamic Sampling interfaces, small test cases | Integrate/short test, DAPO slides/script | E4–E6, entropy/sampling cost analysis |
-| **FX — integration** | Decide H200 access, common checkpoint/splits/logging and GPU budget | Assemble full slides/script, pilot results labeled provisional | Unified training schedule, metrics, report, recorded presentation integration |
+| **Kira — DAPO** | Clip-Higher, Dynamic Sampling **and token-level loss** interfaces, unit tests | E7 single-change loss test, E8 overlong-handling specification, DAPO slides/script | E4/E5/E7 component results and E8 combined DAPO-style result with FX; E6 if resources permit |
+| **FX — integration** | Decide H200 access, common checkpoint/splits/logging and GPU budget | Assemble full slides/script, pilot results labeled provisional | Integrate E0/E3/E8 comparisons, ensure token budget and overlong accounting, manage runs, report/video |
 
 Video editing should be explicitly assigned separately; it is not automatically FX's responsibility.
 
@@ -101,9 +110,9 @@ Video editing should be explicitly assigned separately; it is not automatically 
 
 **Nov 12 Initial Draft:** submit PDF slides + script, with an accurate experimental plan and genuinely verified progress. **Do not require a completed video or fabricate ablation outcomes.**
 
-**Dec 7 Final:** aim for E0–E3 with controlled training, E4–E6 if resources permit; always present the exact set actually run. If mixed-reward rate is near zero or rollout costs exceed budget, report feasibility findings, downscope model/prompt budget *for all arms*, or use fixed-rollout diagnostics and clearly label uncompleted work.
+**Dec 7 Final:** target E0/E3/E8 method comparison **and** E0–E3 normalization factorial, E4/E5/E7 component controls; E6 is optional if time/compute permits. This is an ambitious target, not a guarantee: always present the exact set actually run. If mixed-reward rate is near zero or rollout costs exceed budget, report feasibility findings, downscope model/prompt budget *for all arms*, or use fixed-rollout diagnostics and clearly label uncompleted work.
 
-**Unit-test checklist:** numerical std vs centered advantages (including homogeneous groups), per-token clipping gradients at upper/lower boundaries, length-aggregation coefficients, fixed-`L` gradient scaling, masked padding zero gradient, frozen old logprobs/advantages, dynamic-sampling acceptance for K=0/1/G, reward final-answer extraction.
+**Unit-test checklist:** numerical std vs centered advantages (including homogeneous groups), per-token clipping gradients at upper/lower boundaries, length-aggregation coefficients (including E7 token-level mean), fixed-`L` gradient scaling, masked padding zero gradient, frozen old logprobs/advantages, dynamic-sampling acceptance for K=0/1/G, overlong filtering/soft penalty and reward final-answer extraction.
 
 ## 9. References
 
