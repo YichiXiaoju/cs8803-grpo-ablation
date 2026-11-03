@@ -21,6 +21,10 @@ def group_advantages(rewards: torch.Tensor, mode: str = "std", eps: float = 1e-8
     if rewards.ndim != 2:
         raise ValueError("rewards must have shape [prompts, group_size]")
     centered = rewards - rewards.mean(dim=1, keepdim=True)
+    # Rounding in the mean leaves centered=-delta, std=|delta| > eps for some
+    # identical groups (e.g. float32 0.7 x 8), which std mode would turn into +-1.
+    identical = (rewards == rewards[:, :1]).all(dim=1, keepdim=True)
+    centered = centered.masked_fill(identical, 0.0)
     if mode == "center":
         return centered
     if mode == "std":
@@ -39,6 +43,7 @@ def policy_objective(
 
     advantages: [P,G], broadcast over T. Caller supplies frozen rollout
     logprobs in old_logp. For textbook on-policy first update, new==old.
+    Padding values must be finite here; compute_loss neutralizes them.
     """
     if new_logp.shape != old_logp.shape or new_logp.ndim != 3:
         raise ValueError("log probabilities must have matching [P,G,T] shapes")
@@ -83,6 +88,13 @@ def policy_loss(
 
 
 def compute_loss(new_logp, old_logp, rewards, mask, config: ObjectiveConfig):
+    if not new_logp.shape == old_logp.shape == mask.shape:
+        raise ValueError("log probabilities and mask must have matching [P,G,T] shapes")
+    # Masking the surrogate alone is not enough: an inf ratio at a padded
+    # position still backpropagates 0 * inf = NaN, so pin padding to ratio 1.
+    padding = ~mask.bool()
+    new_logp = new_logp.masked_fill(padding, 0.0)
+    old_logp = old_logp.masked_fill(padding, 0.0)
     advantage = group_advantages(rewards, config.advantage, config.eps)
     surrogate = policy_objective(new_logp, old_logp, advantage, config)
     return policy_loss(surrogate, mask, config)
