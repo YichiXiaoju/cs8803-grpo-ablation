@@ -5,13 +5,11 @@ This runs a full-parameter, four-sample GRPO pilot on `allenai/OLMo-2-0425-1B` B
 On the ICE login shell, after cloning the repository into `~/cs8803-grpo-ablation` and checking out the pilot branch:
 
 ```bash
-module load anaconda3/2023.03
 SCRATCH_ROOT="$(readlink -f ~/scratch)/grpo"
-mkdir -p "$SCRATCH_ROOT/envs" "$SCRATCH_ROOT/conda-pkgs" "$SCRATCH_ROOT/pip-cache"
-export CONDA_PKGS_DIRS="$SCRATCH_ROOT/conda-pkgs"
-export PIP_CACHE_DIR="$SCRATCH_ROOT/pip-cache"
+mkdir -p "$SCRATCH_ROOT"
 cd ~/cs8803-grpo-ablation
-conda env create -p "$SCRATCH_ROOT/envs/grpo-ice-train" -f environment-ice-train.yml
+sbatch --output="$SCRATCH_ROOT/olmo-setup-%j.log" scripts/ice_olmo_setup.sbatch
+# After setup completes successfully:
 sbatch --output="$SCRATCH_ROOT/olmo-grpo-%j.log" scripts/ice_olmo_grpo.sbatch
 ```
 
