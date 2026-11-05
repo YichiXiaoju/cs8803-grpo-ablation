@@ -2,7 +2,7 @@
 #SBATCH --job-name=olmo-base-test
 #SBATCH --account=ece
 #SBATCH --partition=ice-gpu
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:h100:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=01:00:00
