@@ -141,7 +141,7 @@ def main():
         gradient_checkpointing=True,
         logging_steps=1,
         save_strategy="steps",
-        save_steps=1,
+        save_steps=1 if cfg["max_steps"] <= 4 else 5,
         save_total_limit=2,
         report_to="none",
         remove_unused_columns=False,
