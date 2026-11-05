@@ -1,22 +1,20 @@
-"""Resumable, paired GSM8K test evaluation for OLMo GRPO checkpoints."""
+"""Resumable, paired GSM8K validation/test evaluation for GRPO checkpoints."""
 
 import argparse
 import json
-import random
 import time
 from pathlib import Path
 
 import torch
 import yaml
-from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from grpo_ablation.rewards import exact_number_reward, extract_final_number, gsm8k_ground_truth
 from train_ice_grpo import PROMPT
+from gsm8k_split import load_split, write_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-TEST_SEED = 4242
-TEST_PROMPTS = 100
+EVAL_SEED = 4242
 
 
 def summarize(groups):
@@ -46,6 +44,8 @@ def main():
     parser.add_argument("--label", required=True, help="For example: base, step4, step100")
     parser.add_argument("--model", required=True, help="Hugging Face ID or local saved-model path")
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--split", choices=("validation", "test"), default="validation")
+    parser.add_argument("--questions", type=int, default=0, help="Fixed prefix of the chosen split; 0 means the full split")
     args = parser.parse_args()
     cfg = yaml.safe_load((ROOT / "configs/ice_olmo_grpo.yaml").read_text())
     if not torch.cuda.is_available():
@@ -54,16 +54,20 @@ def main():
     if output_dir.is_relative_to(ROOT):
         raise ValueError("Evaluation outputs must be outside Git")
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / f"{args.label}.json"
+    if args.questions < 0:
+        raise ValueError("--questions must be nonnegative")
+    path = output_dir / f"{args.label}-{args.split}.json"
 
-    rows = load_dataset(cfg["dataset"], cfg["dataset_config"], split="test", revision=cfg["dataset_revision"])
-    indices = random.Random(TEST_SEED).sample(range(len(rows)), TEST_PROMPTS)
+    source_rows, all_splits, split_manifest = load_split(cfg)
+    write_manifest(output_dir / "split_manifest.json", split_manifest)
+    keys = all_splits[args.split][:args.questions or None]
     source = str(Path(args.model).expanduser().resolve()) if Path(args.model).expanduser().exists() else args.model
     revision = cfg["model_revision"] if source == cfg["model"] else None
     manifest = {
         "source": source, "revision": revision, "dataset": cfg["dataset"],
-        "dataset_revision": cfg["dataset_revision"], "split": "test",
-        "indices": indices, "seed": TEST_SEED, "group_size": 4,
+        "dataset_revision": cfg["dataset_revision"], "split": args.split,
+        "split_sha256": split_manifest["sha256"], "indices": keys,
+        "seed": EVAL_SEED, "group_size": 4,
         "max_new_tokens": cfg["max_completion_length"],
         "temperature": cfg["temperature"], "top_p": cfg["top_p"],
         "top_k": 0, "dtype": "bfloat16", "prompt": PROMPT,
@@ -74,7 +78,7 @@ def main():
         if previous["manifest"] != manifest:
             raise ValueError(f"Existing evaluation manifest differs: {path}")
         groups = previous["groups"]
-    if len(groups) == TEST_PROMPTS:
+    if len(groups) == len(keys):
         print(json.dumps(summarize(groups), indent=2), flush=True)
         return
 
@@ -83,14 +87,15 @@ def main():
         source, revision=revision, local_files_only=True, dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
     ).to("cuda").eval()
-    for position in range(len(groups), TEST_PROMPTS):
-        row = rows[indices[position]]
+    for position in range(len(groups), len(keys)):
+        part, index = keys[position]
+        row = source_rows[part][index]
         truth = gsm8k_ground_truth(row["answer"])
         if truth is None:
-            raise ValueError(f"Unparseable test answer at row {indices[position]}")
+            raise ValueError(f"Unparseable {args.split} answer at {part} row {index}")
         prompt = PROMPT.format(question=row["question"])
         inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-        torch.manual_seed(TEST_SEED + position)
+        torch.manual_seed(EVAL_SEED + position)
         started = time.monotonic()
         with torch.inference_mode():
             sequences = model.generate(
@@ -110,9 +115,9 @@ def main():
                 "generated_tokens": len(tokens),
                 "finish_reason": "length" if len(tokens) >= cfg["max_completion_length"] and tokens[-1].item() != tokenizer.eos_token_id else "eos",
             })
-        groups.append({"dataset_index": indices[position], "truth": str(truth), "completions": items})
+        groups.append({"dataset_source": part, "dataset_index": index, "truth": str(truth), "completions": items})
         save(path, manifest, groups)
-        print(f"{args.label}: {position + 1}/{TEST_PROMPTS}, correct={sum(item['reward'] for item in items):.0f}/4, seconds={time.monotonic() - started:.1f}", flush=True)
+        print(f"{args.label}: {position + 1}/{len(keys)}, correct={sum(item['reward'] for item in items):.0f}/4, seconds={time.monotonic() - started:.1f}", flush=True)
     print(json.dumps(summarize(groups), indent=2), flush=True)
 
 

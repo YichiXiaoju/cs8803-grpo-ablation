@@ -4,8 +4,6 @@ dataset: openai/gsm8k
 dataset_config: main
 dataset_revision: 740312add88f781978c0658806c59bc2815b9866
 seed: 42
-train_prompts: 128
-eval_prompts: 20
 group_size: 4
 max_steps: 4
 max_completion_length: 192

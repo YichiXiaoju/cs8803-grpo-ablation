@@ -9,14 +9,14 @@ from decimal import Decimal
 
 import torch
 import yaml
-from datasets import Dataset, load_dataset
+from datasets import Dataset
 from transformers import AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 
 from grpo_ablation.rewards import exact_number_reward, gsm8k_ground_truth
+from gsm8k_split import load_split, write_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-STUDY_INDICES = ROOT / "studies/model_selection/question_indices.json"
 PROMPT = (
     "Solve the math problem step by step. End with a separate line in the "
     "format Final answer: <number>.\n\n"
@@ -26,23 +26,18 @@ PROMPT = (
 )
 
 
-def build_splits(rows, excluded, train_size, eval_size, seed):
-    import random
-
-    eligible = [i for i in range(len(rows)) if i not in excluded]
-    indices = random.Random(seed).sample(eligible, train_size + eval_size)
-
-    def make(indices):
+def build_splits(source, split):
+    def make(keys):
         data = []
-        for idx in indices:
-            row = rows[idx]
+        for part, idx in keys:
+            row = source[part][idx]
             truth = gsm8k_ground_truth(row["answer"])
             if truth is None:
-                raise ValueError(f"Unparseable ground truth at GSM8K row {idx}")
+                raise ValueError(f"Unparseable ground truth at GSM8K {part} row {idx}")
             data.append({"prompt": PROMPT.format(question=row["question"]), "ground_truth": str(truth)})
         return Dataset.from_list(data)
 
-    return make(indices[:train_size]), make(indices[train_size:]), indices
+    return make(split["train"]), make(split["validation"])
 
 
 def reward_func(completions, ground_truth, **_kwargs):
@@ -94,17 +89,12 @@ def main():
         raise ValueError("The agreed pilot uses G=4")
 
     output.mkdir(parents=True, exist_ok=True)
-    rows = load_dataset(
-        cfg["dataset"], cfg["dataset_config"], split="train", revision=cfg["dataset_revision"]
-    )
-    excluded = set(json.loads(STUDY_INDICES.read_text()))
-    train, evaluation, indices = build_splits(
-        rows, excluded, cfg["train_prompts"], cfg["eval_prompts"], cfg["seed"]
-    )
+    source, split, split_manifest = load_split(cfg)
+    write_manifest(output / "split_manifest.json", split_manifest)
+    train, evaluation = build_splits(source, split)
     manifest = {
-        "config": cfg, "train_indices": indices[:cfg["train_prompts"]],
-        "eval_indices": indices[cfg["train_prompts"]:],
-        "excluded_selection_indices": sorted(excluded),
+        "config": cfg, "split_sha256": split_manifest["sha256"],
+        "train_questions": len(split["train"]), "validation_questions": len(split["validation"]),
     }
     manifest_path = output / "manifest.json"
     if manifest_path.exists():
