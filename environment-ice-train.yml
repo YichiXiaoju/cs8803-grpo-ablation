@@ -1,0 +1,12 @@
+name: grpo-ice-train
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - "-e .[data]"
+      - "trl==0.28.0"
+      - "transformers>=4.56,<5"
+      - "accelerate>=1.4,<2"
+      - "pyyaml>=6,<7"

@@ -1,0 +1,17 @@
+model: allenai/OLMo-2-0425-1B
+model_revision: a1847dff35000b4271fa70afc5db10fd29fedbdf
+dataset: openai/gsm8k
+dataset_config: main
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+seed: 42
+train_prompts: 128
+eval_prompts: 20
+group_size: 4
+max_steps: 4
+max_prompt_length: 256
+max_completion_length: 192
+temperature: 0.8
+top_p: 0.95
+learning_rate: 1.0e-6
+beta: 0.0
+epsilon: 0.2
