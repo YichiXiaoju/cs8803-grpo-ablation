@@ -107,15 +107,17 @@ def main():
         save_strategy="no",
         report_to="none",
         remove_unused_columns=False,
-        model_init_kwargs={"revision": cfg["model_revision"], "dtype": torch.bfloat16},
+        # Keep trainable weights in fp32 so 1e-6 updates are not rounded away.
+        model_init_kwargs={"revision": cfg["model_revision"], "dtype": torch.float32},
     )
     trainer = GRPOTrainer(
         model=cfg["model"], reward_funcs=reward_func, args=args,
         train_dataset=train, eval_dataset=evaluation, processing_class=tokenizer,
     )
-    before = hashlib.sha256(next(trainer.model.parameters()).detach().cpu().numpy().tobytes()).hexdigest()
+    first_parameter = next(trainer.model.parameters())
+    before = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
     result = trainer.train()
-    after = hashlib.sha256(next(trainer.model.parameters()).detach().cpu().numpy().tobytes()).hexdigest()
+    after = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
     summary = {
         "training_performed": True, "steps": result.global_step,
         "train_loss": result.training_loss, "first_parameter_sha256_before": before,
