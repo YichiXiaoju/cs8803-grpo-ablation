@@ -66,7 +66,8 @@ def main():
     manifest = {
         "source": source, "revision": revision, "dataset": cfg["dataset"],
         "dataset_revision": cfg["dataset_revision"], "split": args.split,
-        "split_sha256": split_manifest["sha256"], "indices": keys,
+        "split_sha256": split_manifest["sha256"],
+        "indices": [list(key) for key in keys],
         "seed": EVAL_SEED, "group_size": 4,
         "max_new_tokens": cfg["max_completion_length"],
         "temperature": cfg["temperature"], "top_p": cfg["top_p"],
