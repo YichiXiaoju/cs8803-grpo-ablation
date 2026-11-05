@@ -18,4 +18,4 @@ mkdir -p "${HF_HOME}" "${HF_DATASETS_CACHE}" "${SCRATCH_ROOT}/runs"
 cd "${REPO}"
 "${SCRATCH_ROOT}/envs/grpo-ice-train/bin/python" scripts/train_ice_grpo.py \
   --config configs/ice_olmo_grpo.yaml \
-  --output "${SCRATCH_ROOT}/runs/olmo-grpo-${SLURM_JOB_ID}"
+  --output "${SCRATCH_ROOT}/runs/olmo-grpo-pilot"

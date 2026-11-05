@@ -49,6 +49,17 @@ def reward_func(completions, ground_truth, **_kwargs):
     return [exact_number_reward(text, Decimal(truth)) for text, truth in zip(completions, ground_truth, strict=True)]
 
 
+def latest_complete_checkpoint(trainer_dir):
+    """Ignore a checkpoint interrupted while it was being written."""
+    checkpoints = sorted(
+        trainer_dir.glob("checkpoint-*"),
+        key=lambda path: int(path.name.rsplit("-", 1)[1]),
+        reverse=True,
+    )
+    required = ("trainer_state.json", "model.safetensors", "optimizer.pt", "scheduler.pt")
+    return next((path for path in checkpoints if all((path / name).is_file() for name in required)), None)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=ROOT / "configs/ice_olmo_grpo.yaml")
@@ -75,11 +86,17 @@ def main():
     train, evaluation, indices = build_splits(
         rows, excluded, cfg["train_prompts"], cfg["eval_prompts"], cfg["seed"]
     )
-    (output / "manifest.json").write_text(json.dumps({
+    manifest = {
         "config": cfg, "train_indices": indices[:cfg["train_prompts"]],
         "eval_indices": indices[cfg["train_prompts"]:],
         "excluded_selection_indices": sorted(excluded),
-    }, indent=2) + "\n")
+    }
+    manifest_path = output / "manifest.json"
+    if manifest_path.exists():
+        if json.loads(manifest_path.read_text()) != manifest:
+            raise ValueError("Existing run manifest differs; use a new output directory")
+    else:
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
     tokenizer = AutoTokenizer.from_pretrained(cfg["model"], revision=cfg["model_revision"])
     if tokenizer.pad_token is None:
@@ -103,7 +120,9 @@ def main():
         bf16=True,
         gradient_checkpointing=True,
         logging_steps=1,
-        save_strategy="no",
+        save_strategy="steps",
+        save_steps=1,
+        save_total_limit=2,
         report_to="none",
         remove_unused_columns=False,
         # Keep trainable weights in fp32 so 1e-6 updates are not rounded away.
@@ -115,7 +134,10 @@ def main():
     )
     first_parameter = next(trainer.model.parameters())
     before = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
-    result = trainer.train()
+    checkpoint = latest_complete_checkpoint(output / "trainer")
+    if checkpoint:
+        print(f"Resuming from {checkpoint}", flush=True)
+    result = trainer.train(resume_from_checkpoint=str(checkpoint) if checkpoint else None)
     after = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
     summary = {
         "training_performed": True, "steps": result.global_step,
@@ -123,6 +145,7 @@ def main():
         "first_parameter_sha256_after": after, "first_parameter_changed": before != after,
         "gpu": torch.cuda.get_device_name(0),
         "peak_cuda_memory_gb": round(torch.cuda.max_memory_allocated() / 1e9, 2),
+        "resumed_from_checkpoint": str(checkpoint) if checkpoint else None,
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     trainer.save_model(str(output / "model"))
