@@ -1,0 +1,36 @@
+dataset: openai/gsm8k
+dataset_config: main
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+split: train
+seed: 42
+num_prompts: 100
+group_size: 4
+temperature: 0.8
+top_p: 0.95
+max_completion_length: 256
+models:
+  qwen:
+    id: mlx-community/Qwen2.5-7B-4bit
+    revision: fd815ff0a73b38d0fb29c00a57cca80fe778462c
+    backend: mlx
+    precision: 4-bit
+  qwen_1_5b:
+    id: mlx-community/Qwen2.5-1.5B-4bit
+    revision: df5d0cfe2b3cab6481bc34dd4474be883bfec031
+    backend: mlx
+    precision: 4-bit
+  gemma:
+    id: google/gemma-3-1b-pt
+    revision: fcf18a2a879aab110ca39f8bffbccd5d49d8eb29
+    backend: mps
+    precision: bfloat16
+  smollm:
+    id: HuggingFaceTB/SmolLM2-1.7B
+    revision: effd688a12921b4cc83e3312b6feb579f70f9c71
+    backend: mps
+    precision: bfloat16
+  olmo:
+    id: allenai/OLMo-2-0425-1B
+    revision: a1847dff35000b4271fa70afc5db10fd29fedbdf
+    backend: mps
+    precision: bfloat16
