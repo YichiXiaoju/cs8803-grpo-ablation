@@ -17,6 +17,7 @@ hf-cache/
 checkpoints/
 wandb/
 outputs/
+slurm-*.out
 *.safetensors
 *.pt
 .DS_Store

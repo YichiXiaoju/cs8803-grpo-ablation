@@ -92,7 +92,6 @@ def main():
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4,
         num_generations=cfg["group_size"],
-        max_prompt_length=cfg["max_prompt_length"],
         max_completion_length=cfg["max_completion_length"],
         temperature=cfg["temperature"],
         top_p=cfg["top_p"],
