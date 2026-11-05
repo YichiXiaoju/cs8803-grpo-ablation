@@ -74,8 +74,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=ROOT / "configs/ice_olmo_grpo.yaml")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--max-steps", type=int, help="Extend an existing run to this many optimizer steps")
     args = parser.parse_args()
     cfg = yaml.safe_load(args.config.read_text())
+    if args.max_steps is not None:
+        if args.max_steps <= 0:
+            raise ValueError("--max-steps must be positive")
+        cfg["max_steps"] = args.max_steps
     output = args.output.expanduser().resolve()
     if output.is_relative_to(ROOT):
         raise ValueError("Training outputs must be outside the Git repository")
@@ -103,8 +108,13 @@ def main():
     }
     manifest_path = output / "manifest.json"
     if manifest_path.exists():
-        if json.loads(manifest_path.read_text()) != manifest:
+        previous = json.loads(manifest_path.read_text())
+        previous_steps = previous["config"]["max_steps"]
+        previous["config"]["max_steps"] = cfg["max_steps"]
+        if previous != manifest or cfg["max_steps"] < previous_steps:
             raise ValueError("Existing run manifest differs; use a new output directory")
+        if cfg["max_steps"] > previous_steps:
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     else:
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
