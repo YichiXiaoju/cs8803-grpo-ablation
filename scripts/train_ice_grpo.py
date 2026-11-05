@@ -56,8 +56,18 @@ def latest_complete_checkpoint(trainer_dir):
         key=lambda path: int(path.name.rsplit("-", 1)[1]),
         reverse=True,
     )
-    required = ("trainer_state.json", "model.safetensors", "optimizer.pt", "scheduler.pt")
-    return next((path for path in checkpoints if all((path / name).is_file() for name in required)), None)
+    required = ("trainer_state.json", "optimizer.pt", "scheduler.pt")
+    for path in checkpoints:
+        if not all((path / name).is_file() for name in required):
+            continue
+        if (path / "model.safetensors").is_file():
+            return path
+        index = path / "model.safetensors.index.json"
+        if index.is_file():
+            shards = set(json.loads(index.read_text())["weight_map"].values())
+            if shards and all((path / shard).is_file() for shard in shards):
+                return path
+    return None
 
 
 def main():
