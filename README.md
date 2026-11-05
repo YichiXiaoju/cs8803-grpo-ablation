@@ -1,6 +1,6 @@
 # CS 8803 DRL — GRPO / Dr. GRPO / DAPO Ablations
 
-**Status: reproducible objective-layer starter, NOT an end-to-end LLM trainer.**
+**Status: model-selection study complete; OLMo GRPO training pilot submitted on ICE, awaiting GPU validation.**
 
 Course team project comparing (1) baseline Group Relative Policy Optimization (GRPO), (2) Dr. GRPO normalization changes, and (3) DAPO components: clip-higher, dynamic sampling, token-level loss and overlong response handling.
 
@@ -11,7 +11,7 @@ Course team project comparing (1) baseline Group Relative Policy Optimization (G
 3. What is the independent and combined effect of clip-higher and dynamic sampling under matched rollout budgets?
 
 ## Proposed experiment
-- **Initial policy:** to be selected after a fixed-prompt comparison of ICE-compatible base checkpoints.
+- **Initial policy:** `allenai/OLMo-2-0425-1B` Base, selected from the fixed-prompt comparison of ICE-compatible checkpoints.
 - **Task:** `openai/gsm8k` (`main`).
 - **Reward:** exact final numeric answer correctness, binary 0/1; no reward model or critic training.
 - **Model selection study:** compare fixed GSM8K train prompts with four responses per prompt before choosing an ICE-compatible training checkpoint.
@@ -52,8 +52,12 @@ src/grpo_ablation/configs.py    # Component presets
 scripts/inspect_gsm8k.py       # Dataset inspection utility
 scripts/model_selection.py     # Resumable five-model comparison
 scripts/summarize_model_selection.py  # Validate and summarize results
+scripts/train_ice_grpo.py      # OLMo GRPO pilot training entry point
+scripts/ice_olmo_setup.sbatch  # ICE environment setup and model prefetch
+scripts/ice_olmo_grpo.sbatch   # ICE GPU training job
 studies/model_selection/       # Fixed protocol, question IDs, compact results
 environment.yml                # Conda environment for Apple Silicon evaluation
+environment-ice-train.yml      # Conda environment for ICE training
 tests/                         # Mathematical and gradient-flow unit tests
 docs/EXPERIMENT_PLAN.md         # Controlled design and metrics
 docs/TEAM.md                    # Four-person ownership
@@ -61,7 +65,7 @@ docs/TEAM.md                    # Four-person ownership
 
 ## Important limitations / next milestones
 
-- The model-selection evaluation has policy generation but no log-prob recomputation, optimizer training loop or GRPO weight updates yet.
+- The model-selection evaluation is inference only. The separate ICE GRPO pilot has not yet produced a verified weight update or evaluation result.
 - `dapo_core` toggles only token mean and asymmetric clipping: it is **not** full DAPO. Dynamic sampling and overlong handling remain to be implemented and evaluated.
 - These objective functions omit optional KL and multi-GPU normalization details; use one consistently controlled training framework for end-to-end comparisons.
 - Numeric reward verifier is intentionally strict; audit parsing failures. If you change model output format, update parser and tests together.
