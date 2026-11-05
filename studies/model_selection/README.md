@@ -1,0 +1,9 @@
+# Initial model selection
+
+Compare five pretrained checkpoints on the same 100 GSM8K training questions, with four independent sampled completions per question. This is an inference-only study, not GRPO training. Both Qwen sizes are local 4-bit references and are not eligible for ICE use; the ICE starting checkpoint will be chosen from Gemma, SmolLM and OLMo after the results are reviewed with the team.
+
+Run `scripts/model_selection.py --model {qwen,qwen_1_5b,gemma,smollm,olmo}` from the repository root. Outputs and per-question checkpoints are saved under ignored `runs/model_selection/`. The script uses the same prompt, seed schedule, temperature 0.8, top-p 0.95, 256-token ceiling and strict exact-number reward for each model. It saves the fixed question indices in `question_indices.json` and refuses to silently change them. Model weight caches stay outside Git.
+
+Primary measurements: completion accuracy and mixed-reward group rate. Also report answer parse rate, truncation rate, and total generation time. The models differ in size; both Qwen checkpoints use 4-bit MLX while the other three are loaded as bfloat16 on Apple MPS. Qwen2.5-1.5B helps isolate the effect of the 7B Qwen's larger size, but architecture and precision still vary across families.
+
+The completed runs are summarized in [`results.json`](results.json), which contains validated aggregate counts and timings. Raw completions are intentionally excluded from Git and remain in `runs/model_selection/` on the local machine. No ICE checkpoint has been selected yet. The strict final-answer parser may count some mathematically correct responses as wrong when they use an unsupported format; review representative outputs before drawing a conclusion. These 100 questions are from the GSM8K training split, so this study does not measure held-out accuracy.
