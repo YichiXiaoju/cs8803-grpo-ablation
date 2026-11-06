@@ -42,12 +42,13 @@ def save(path, manifest, groups):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--label", required=True, help="For example: base, step4, step100")
+    parser.add_argument("--config", type=Path, default=ROOT / "configs/ice_olmo_grpo.yaml")
     parser.add_argument("--model", required=True, help="Hugging Face ID or local saved-model path")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--questions", type=int, default=0, help="Fixed prefix of the chosen split; 0 means the full split")
     args = parser.parse_args()
-    cfg = yaml.safe_load((ROOT / "configs/ice_olmo_grpo.yaml").read_text())
+    cfg = yaml.safe_load(args.config.read_text())
     if not torch.cuda.is_available():
         raise RuntimeError("Evaluation requires a GPU allocation")
     output_dir = args.output_dir.expanduser().resolve()

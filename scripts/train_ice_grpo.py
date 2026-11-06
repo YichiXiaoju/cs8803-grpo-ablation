@@ -111,9 +111,18 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(cfg["model"], revision=cfg["model_revision"])
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    lora = cfg.get("lora")
+    peft_config = None
+    if lora:
+        from peft import LoraConfig
+        peft_config = LoraConfig(
+            r=lora["r"], lora_alpha=lora["alpha"],
+            lora_dropout=lora["dropout"], target_modules=lora["target_modules"],
+            task_type="CAUSAL_LM",
+        )
     args = GRPOConfig(
         output_dir=str(output / "trainer"),
-        run_name="olmo2-1b-grpo-pilot",
+        run_name=cfg["model"].split("/")[-1].lower() + "-grpo",
         seed=cfg["seed"],
         max_steps=cfg["max_steps"],
         per_device_train_batch_size=1,
@@ -136,13 +145,14 @@ def main():
         report_to="none",
         remove_unused_columns=False,
         # Keep trainable weights in fp32 so 1e-6 updates are not rounded away.
-        model_init_kwargs={"revision": cfg["model_revision"], "dtype": torch.float32},
+        model_init_kwargs={"revision": cfg["model_revision"], "dtype": torch.bfloat16 if lora else torch.float32},
     )
     trainer = GRPOTrainer(
         model=cfg["model"], reward_funcs=reward_func, args=args,
         train_dataset=train, eval_dataset=evaluation, processing_class=tokenizer,
+        peft_config=peft_config,
     )
-    first_parameter = next(trainer.model.parameters())
+    first_parameter = next(parameter for parameter in trainer.model.parameters() if parameter.requires_grad)
     before = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
     checkpoint = latest_complete_checkpoint(output / "trainer")
     if checkpoint:
