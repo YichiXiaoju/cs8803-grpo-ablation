@@ -84,11 +84,18 @@ def main():
         print(json.dumps(summarize(groups), indent=2), flush=True)
         return
 
-    tokenizer = AutoTokenizer.from_pretrained(source, revision=revision, local_files_only=True)
+    adapter = Path(source).is_dir() and (Path(source) / "adapter_config.json").is_file()
+    model_source = cfg["model"] if adapter else source
+    model_revision = cfg["model_revision"] if adapter else revision
+    tokenizer = AutoTokenizer.from_pretrained(model_source, revision=model_revision, local_files_only=True)
     model = AutoModelForCausalLM.from_pretrained(
-        source, revision=revision, local_files_only=True, dtype=torch.bfloat16,
+        model_source, revision=model_revision, local_files_only=True, dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
-    ).to("cuda").eval()
+    )
+    if adapter:
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, source, local_files_only=True)
+    model = model.to("cuda").eval()
     for position in range(len(groups), len(keys)):
         part, index = keys[position]
         row = source_rows[part][index]
