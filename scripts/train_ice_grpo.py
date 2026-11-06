@@ -55,7 +55,7 @@ def latest_complete_checkpoint(trainer_dir):
     for path in checkpoints:
         if not all((path / name).is_file() for name in required):
             continue
-        if (path / "model.safetensors").is_file():
+        if (path / "model.safetensors").is_file() or (path / "adapter_model.safetensors").is_file():
             return path
         index = path / "model.safetensors.index.json"
         if index.is_file():
