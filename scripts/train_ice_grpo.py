@@ -51,9 +51,14 @@ def latest_complete_checkpoint(trainer_dir):
         key=lambda path: int(path.name.rsplit("-", 1)[1]),
         reverse=True,
     )
-    required = ("trainer_state.json", "optimizer.pt", "scheduler.pt")
+    required = ("trainer_state.json", "scheduler.pt")
     for path in checkpoints:
         if not all((path / name).is_file() for name in required):
+            continue
+        if ((path / "pytorch_model_fsdp_0" / ".metadata").is_file()
+                and (path / "optimizer_0" / ".metadata").is_file()):
+            return path
+        if not (path / "optimizer.pt").is_file():
             continue
         if (path / "model.safetensors").is_file() or (path / "adapter_model.safetensors").is_file():
             return path
@@ -112,6 +117,7 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     lora = cfg.get("lora")
+    fsdp = cfg.get("fsdp", "")
     peft_config = None
     if lora:
         from peft import LoraConfig
@@ -137,7 +143,9 @@ def main():
         loss_type="grpo",
         scale_rewards="group",
         bf16=True,
-        gradient_checkpointing=True,
+        gradient_checkpointing=not bool(fsdp),
+        fsdp=fsdp,
+        fsdp_config=cfg.get("fsdp_config"),
         logging_steps=1,
         save_strategy="steps",
         save_steps=1 if cfg["max_steps"] <= 4 else 5,
@@ -152,22 +160,23 @@ def main():
         train_dataset=train, eval_dataset=evaluation, processing_class=tokenizer,
         peft_config=peft_config,
     )
-    first_parameter = next(parameter for parameter in trainer.model.parameters() if parameter.requires_grad)
-    before = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
+    first_parameter = None if fsdp else next(parameter for parameter in trainer.model.parameters() if parameter.requires_grad)
+    before = None if first_parameter is None else hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
     checkpoint = latest_complete_checkpoint(output / "trainer")
     if checkpoint:
         print(f"Resuming from {checkpoint}", flush=True)
     result = trainer.train(resume_from_checkpoint=str(checkpoint) if checkpoint else None)
-    after = hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
+    after = None if first_parameter is None else hashlib.sha256(first_parameter.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
     summary = {
         "training_performed": True, "steps": result.global_step,
         "train_loss": result.training_loss, "first_parameter_sha256_before": before,
-        "first_parameter_sha256_after": after, "first_parameter_changed": before != after,
+        "first_parameter_sha256_after": after, "first_parameter_changed": before != after if first_parameter is not None else None,
         "gpu": torch.cuda.get_device_name(0),
         "peak_cuda_memory_gb": round(torch.cuda.max_memory_allocated() / 1e9, 2),
         "resumed_from_checkpoint": str(checkpoint) if checkpoint else None,
     }
-    (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    if trainer.is_world_process_zero():
+        (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     trainer.save_model(str(output / "model"))
     print(json.dumps(summary, indent=2), flush=True)
 
