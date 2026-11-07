@@ -58,8 +58,10 @@ def latest_complete_checkpoint(trainer_dir):
         if ((path / "pytorch_model_fsdp_0" / ".metadata").is_file()
                 and (path / "optimizer_0" / ".metadata").is_file()):
             return path
-        if not (path / "optimizer.pt").is_file():
+        if not any((path / name).is_file() for name in ("optimizer.pt", "optimizer.bin")):
             continue
+        if (path / "pytorch_model_fsdp.bin").is_file():
+            return path
         if (path / "model.safetensors").is_file() or (path / "adapter_model.safetensors").is_file():
             return path
         index = path / "model.safetensors.index.json"
@@ -149,7 +151,7 @@ def main():
         logging_steps=1,
         save_strategy="steps",
         save_steps=1 if cfg["max_steps"] <= 4 else 5,
-        save_total_limit=2,
+        save_total_limit=1 if fsdp else 2,
         report_to="none",
         remove_unused_columns=False,
         # Keep trainable weights in fp32 so 1e-6 updates are not rounded away.
