@@ -1,7 +1,7 @@
-"""Keep an inference-ready copy of the 7B model at optimizer step 100.
+"""Keep an inference-ready copy of the 7B model at optimizer step 50.
 
 Run alongside training. Hard links avoid copying 28 GB while the checkpoint
-rotation is in progress; the saved weights survive deletion of checkpoint-100.
+rotation is in progress; the saved weights survive deletion of checkpoint-50.
 """
 
 import json
@@ -13,8 +13,8 @@ from pathlib import Path
 def main():
     root = Path.home() / "scratch/grpo/runs/olmo2-7b-full-grpo-1epoch-lr1e-6"
     trainer = root / "trainer"
-    checkpoint = trainer / "checkpoint-100"
-    destination = root / "milestones/step-100-model"
+    checkpoint = trainer / "checkpoint-50"
+    destination = root / "milestones/step-50-model"
     destination.parent.mkdir(parents=True, exist_ok=True)
     if (destination / "COMPLETE").exists():
         print(f"Already preserved: {destination}", flush=True)
@@ -29,11 +29,11 @@ def main():
                 step = json.loads(state_file.read_text())["global_step"]
                 shard_names = sorted(set(json.loads(index_file.read_text())["weight_map"].values()))
                 complete = (
-                    step == 100
+                    step == 50
                     and len(shard_names) > 0
                     and optimizer_file.stat().st_size > 50_000_000_000
                     and (checkpoint / "scheduler.pt").exists()
-                    and not (trainer / "checkpoint-95").exists()
+                    and not (trainer / "checkpoint-45").exists()
                     and all((checkpoint / name).exists() for name in shard_names)
                 )
             except (OSError, ValueError, KeyError):
@@ -55,7 +55,7 @@ def main():
                         if not target.exists():
                             os.link(source, target)
                 (destination / "COMPLETE").write_text(
-                    json.dumps({"step": 100, "source": str(checkpoint), "shards": shard_names}, indent=2) + "\n"
+                    json.dumps({"step": 50, "source": str(checkpoint), "shards": shard_names}, indent=2) + "\n"
                 )
                 print(f"Preserved step-100 model at {destination}", flush=True)
                 return
