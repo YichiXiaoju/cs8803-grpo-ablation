@@ -57,6 +57,7 @@ scripts/inspect_gsm8k.py       # Dataset inspection utility
 scripts/model_selection.py     # Resumable five-model comparison
 scripts/summarize_model_selection.py  # Validate and summarize results
 scripts/train_ice_grpo.py      # OLMo GRPO pilot training entry point
+scripts/show_training_progress.py  # Report completed steps for a live run
 scripts/ice_olmo_setup.sbatch  # ICE environment setup and model prefetch
 scripts/ice_olmo_grpo.sbatch   # ICE GPU training job
 studies/model_selection/       # Fixed protocol, question IDs, compact results
@@ -82,3 +83,12 @@ docs/TEAM.md                    # Four-person ownership
 - TRL GRPOTrainer docs: https://huggingface.co/docs/trl/grpo_trainer
 
 See [experiment plan](docs/EXPERIMENT_PLAN.md) and [team roles](docs/TEAM.md).
+
+To check the latest complete checkpoint while a run is active:
+
+```bash
+python scripts/show_training_progress.py \
+  --output /storage/ice1/1/5/jli3596/grpo/runs/olmo-1b-full-epoch-7034
+```
+
+Add `--watch 30` to poll every 30 seconds until the configured target is reached.
