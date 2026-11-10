@@ -15,16 +15,12 @@ from torch.optim.lr_scheduler import LambdaLR
 from transformers import AutoTokenizer, TrainerCallback
 from trl import GRPOConfig, GRPOTrainer
 
+from grpo_ablation.overlong import DEFAULT_CACHE, OverlongShapedReward, completion_token_counts
+from grpo_ablation.treatments import validate_treatment
 from train_ice_grpo import build_splits, latest_complete_checkpoint, reward_func
 from gsm8k_split import load_split, write_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-SETTINGS = {
-    "E1": ("dr_grpo", "group", False),
-    "E2": ("grpo", "none", False),
-    "E3": ("dr_grpo", "none", False),
-    "E5": ("grpo", "group", True),
-}
 BUDGET = 3_453_024
 SPLIT_SHA = "709281297b46dab371e027be973bf7de17d17fbccfbc33c3e5a07607cff31d94"
 
@@ -75,13 +71,14 @@ class StopOnBudget(TrainerCallback):
 
 
 class AblationTrainer(GRPOTrainer):
-    def __init__(self, *args, ledger, dynamic_sampling, e0_tokens, **kwargs):
+    def __init__(self, *args, ledger, dynamic_sampling, e0_tokens, shaped=None, **kwargs):
         super().__init__(*args, **kwargs)
         if self.accelerator.num_processes != 1 or self.args.generation_batch_size != 4:
             raise ValueError("The E0 rollout protocol requires one process and four completions per generation.")
         self.ledger = ledger
         self.dynamic_sampling = dynamic_sampling
         self.e0_tokens = e0_tokens
+        self.shaped = shaped  # OverlongShapedReward, used to judge groups by correctness
 
     def create_scheduler(self, num_training_steps, optimizer=None):
         if self.lr_scheduler is None:
@@ -108,10 +105,16 @@ class AblationTrainer(GRPOTrainer):
         rng = random.Random((self.args.seed << 32) + self.ledger.attempts)
         while True:
             result = super()._generate_and_score_completions(inputs)
-            # TRL leaves the raw generated EOS and cap-truncated tokens in
-            # completion_mask when mask_truncated_completions=False.
-            tokens = int(result["completion_mask"].sum().item())
-            accepted = not self.dynamic_sampling or bool(result["advantages"].ne(0).any().item())
+            # Count from completion_ids: completion_mask is zeroed for truncated answers when
+            # mask_truncated_completions=True, which would undercount attempted tokens.
+            tokens = int(completion_token_counts(result["completion_ids"], self.eos_token_id).sum().item())
+            if self.shaped is not None:
+                # Shaped rewards make advantages nonzero even for all-correct groups; use correctness.
+                correct = sum(self.shaped.last_correct)
+                informative = 0 < correct < len(self.shaped.last_correct)
+            else:
+                informative = bool(result["advantages"].ne(0).any().item())
+            accepted = not self.dynamic_sampling or informative
             self.ledger.record(step, tokens, accepted)
             if accepted:
                 return result
@@ -144,17 +147,17 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--segment-seconds", type=int, default=52_200)
     parser.add_argument("--smoke", action="store_true", help="Use a small rollout budget for integration validation.")
+    parser.add_argument("--seed", type=int, help="Override the training seed (default: the baseline config seed).")
     cli = parser.parse_args()
     if trl.__version__ != "0.28.0":
         raise RuntimeError("This rollout hook requires the PR #5 pin, TRL 0.28.0.")
     cfg = yaml.safe_load((ROOT / "configs/ice_olmo_grpo.yaml").read_text())
     overrides = yaml.safe_load(cli.config.read_text())
     name = overrides["experiment"]
-    if set(overrides) != {"experiment", "loss_type", "scale_rewards", "dynamic_sampling"}:
-        raise ValueError("An ablation config may change only the declared treatment fields.")
-    loss, scale, dynamic = SETTINGS[name]
-    if (overrides["loss_type"], overrides["scale_rewards"], overrides["dynamic_sampling"]) != (loss, scale, dynamic):
-        raise ValueError(f"Config does not implement {name}.")
+    treatment = validate_treatment(overrides)
+    loss, scale, dynamic = overrides["loss_type"], overrides["scale_rewards"], overrides["dynamic_sampling"]
+    if cli.seed is not None:
+        cfg["seed"] = cli.seed
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("Run inside a BF16-capable ICE GPU allocation.")
     target = 8192 if cli.smoke else BUDGET
@@ -192,14 +195,18 @@ def main():
         per_device_train_batch_size=1, gradient_accumulation_steps=4,
         num_generations=cfg["group_size"], max_completion_length=cfg["max_completion_length"],
         temperature=cfg["temperature"], top_p=cfg["top_p"], learning_rate=cfg["learning_rate"],
-        beta=cfg["beta"], epsilon=cfg["epsilon"], loss_type=loss, scale_rewards=scale,
-        mask_truncated_completions=False, bf16=True, gradient_checkpointing=True,
+        beta=cfg["beta"], epsilon=cfg["epsilon"], epsilon_high=treatment["epsilon_high"],
+        num_iterations=treatment["num_iterations"], loss_type=loss, scale_rewards=scale,
+        mask_truncated_completions=treatment["overlong_filtering"], bf16=True, gradient_checkpointing=True,
         logging_steps=1, save_strategy="steps", save_steps=100, save_total_limit=2,
         report_to="none", remove_unused_columns=False,
         model_init_kwargs={"revision": cfg["model_revision"], "dtype": torch.float32},
     )
+    shaped = None
+    if treatment["overlong_penalty"]:
+        shaped = OverlongShapedReward(reward_func, cfg["max_completion_length"], DEFAULT_CACHE)
     trainer = AblationTrainer(
-        model=cfg["model"], reward_funcs=reward_func, args=args,
+        model=cfg["model"], reward_funcs=shaped or reward_func, args=args, shaped=shaped,
         train_dataset=train, eval_dataset=evaluation, processing_class=tokenizer,
         callbacks=[StopOnBudget(ledger, deadline)], ledger=ledger,
         dynamic_sampling=dynamic, e0_tokens=counts,
