@@ -1,0 +1,4 @@
+experiment: E2
+loss_type: grpo
+scale_rewards: none
+dynamic_sampling: false

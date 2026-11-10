@@ -1,0 +1,23 @@
+model: allenai/OLMo-2-1124-7B
+model_revision: 7df9a82518afdecae4e8c026b27adccc8c1f0032
+dataset: openai/gsm8k
+dataset_config: main
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+seed: 42
+group_size: 4
+# Two prompts per optimizer step on two GPUs; 3517 steps cover 7034 train questions.
+max_steps: 3517
+max_completion_length: 192
+temperature: 0.8
+top_p: 0.95
+# DeepSeekMath GRPO policy learning rate (Section 4.2).
+learning_rate: 1.0e-6
+# Keep the existing baseline objective for comparison with the 1B run.
+beta: 0.0
+epsilon: 0.2
+fsdp: full_shard auto_wrap
+fsdp_config:
+  transformer_layer_cls_to_wrap: Olmo2DecoderLayer
+  use_orig_params: true
+  activation_checkpointing: true
+  state_dict_type: SHARDED_STATE_DICT

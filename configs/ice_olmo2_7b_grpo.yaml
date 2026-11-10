@@ -1,0 +1,26 @@
+model: allenai/OLMo-2-1124-7B
+model_revision: 7df9a82518afdecae4e8c026b27adccc8c1f0032
+dataset: openai/gsm8k
+dataset_config: main
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+seed: 42
+group_size: 4
+max_steps: 100
+max_completion_length: 192
+temperature: 0.8
+top_p: 0.95
+learning_rate: 1.0e-6
+beta: 0.0
+epsilon: 0.2
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.0
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
