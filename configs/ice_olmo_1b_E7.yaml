@@ -1,0 +1,4 @@
+experiment: E7
+loss_type: dapo
+scale_rewards: group
+dynamic_sampling: false

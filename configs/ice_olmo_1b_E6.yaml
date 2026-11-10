@@ -1,0 +1,6 @@
+experiment: E6
+loss_type: grpo
+scale_rewards: group
+dynamic_sampling: true
+epsilon_high: 0.28
+num_iterations: 4

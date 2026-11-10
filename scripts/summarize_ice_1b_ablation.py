@@ -56,6 +56,8 @@ def main():
     parser.add_argument("--e0", type=Path, required=True)
     parser.add_argument("--study", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--arms", nargs="+", default=list(ARMS),
+                        help="Run names, e.g. E7 E4 E0-s43. E0 is the archived run.")
     args = parser.parse_args()
     e0 = read_json(args.e0)
     tokenizer = AutoTokenizer.from_pretrained(
@@ -63,7 +65,7 @@ def main():
         local_files_only=True,
     )
     rows = []
-    for arm in ARMS:
+    for arm in args.arms:
         if arm == "E0":
             evaluation = e0
             training = {"attempted_completion_tokens": E0_TRAIN_TOKENS,

@@ -1,0 +1,8 @@
+experiment: E8
+loss_type: dapo
+scale_rewards: group
+dynamic_sampling: true
+epsilon_high: 0.28
+num_iterations: 4
+overlong_filtering: true
+overlong_penalty: true

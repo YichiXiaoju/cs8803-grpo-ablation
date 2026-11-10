@@ -1,0 +1,6 @@
+experiment: E4C
+loss_type: grpo
+scale_rewards: group
+dynamic_sampling: false
+epsilon_high: 0.20
+num_iterations: 4
