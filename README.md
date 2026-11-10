@@ -47,6 +47,8 @@ For a fresh environment after changing dependencies:
 conda env update -f environment.yml --prune
 ```
 
+The [1B normalization and dynamic-sampling study](studies/ice_1b_ablation/README.md) records the matched-budget runs, validation results, and ICE commands.
+
 ## Repository map
 
 ```text
