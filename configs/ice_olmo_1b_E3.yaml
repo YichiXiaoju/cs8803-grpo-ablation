@@ -1,0 +1,4 @@
+experiment: E3
+loss_type: dr_grpo
+scale_rewards: none
+dynamic_sampling: false

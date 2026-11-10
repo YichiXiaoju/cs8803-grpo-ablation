@@ -1,0 +1,6 @@
+arm,questions,completions,correct,completion_accuracy_pct,mean_answer_text_tokens,training_completion_tokens,rejected_training_completion_tokens
+E0,879,3516,1899,54.0102,113.1544,3453024,0
+E1,879,3516,1791,50.9386,191.9991,3453598,0
+E2,879,3516,1986,56.4846,114.9238,3453488,0
+E3,879,3516,1952,55.5176,116.0885,3453479,0
+E5,879,3516,2071,58.9022,120.4565,3453496,2054482
